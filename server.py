@@ -1,38 +1,57 @@
 import socket
-
+from collections import defaultdict
 
 SERVER_IP = "127.0.0.1"
 SERVER_PORT = 8000
 
-
-def receive_message(server_socket):
-    client_message, client_address = server_socket.recvfrom(4096)
-    client_message = client_message.decode("utf-8")
-    return client_message, client_address
+active_clients = defaultdict(str)
 
 
-def send_message(server_socket, client_address, message):
-    server_socket.sendto(message.encode("utf-8"), client_address)
-    print("--------------------------------\n")
+def handle_message(data, addr):
+    try:
+        message_type = data[0]
+
+        if message_type == 0x01:  # JOINメッセージ
+            username = data[1:].decode("utf-8")
+            active_clients[addr] = username
+            return f"* {username}が参加しました\n--------------------------------"
+
+        elif message_type == 0x02:  # 通常メッセージ
+            username = active_clients.get(addr, "Unknown")
+            message = data[1:].decode("utf-8")
+            return f"{username}> {message}"
+
+    except Exception as e:
+        print(f"エラー: {e}")
+    return None
+
+
+def broadcast(sock, message, exclude_addr=None):
+    if not message:
+        return
+
+    encoded = message.encode("utf-8")
+    for client_addr in active_clients:
+        if client_addr == exclude_addr:
+            continue
+        try:
+            sock.sendto(encoded, client_addr)
+        except:
+            pass
 
 
 def main():
-    # ソケットを作成する
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-
-    # 待ち受けに使用するIPアドレスとポート番号を指定
-    server_socket.bind((SERVER_IP, SERVER_PORT))
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.bind((SERVER_IP, SERVER_PORT))
+    print("サーバーが起動しました")
+    print("--------------------------------")
 
     while True:
-        # クライアントからのメッセージを受信する
-        client_message, client_address = receive_message(server_socket)
-
-        # クライアントからのメッセージを表示する
-        print(f"{client_address}からのメッセージを受信しました.")
-        print(f"メッセージは: [ {client_message} ].")
-
-        # クライアントに応答する
-        send_message(server_socket, client_address, client_message)
+        data, addr = sock.recvfrom(4096)
+        formatted = handle_message(data, addr)
+        if formatted:
+            broadcast(sock, formatted, addr)  # 送信元を除外
+            print(formatted)  # サーバーコンソールに表示
 
 
 if __name__ == "__main__":

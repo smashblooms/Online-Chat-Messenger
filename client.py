@@ -1,41 +1,34 @@
-# socketをインポート
 import socket
+import threading
 
 SERVER_IP = "127.0.0.1"
 SERVER_PORT = 8000
 
 
-def input_message(user_name):
-    message = input(f"{user_name}> ")
-    return message
-
-
-def send_message(client_socket, message):
-    client_socket.sendto(message.encode("utf-8"), (SERVER_IP, SERVER_PORT))
-    print("メッセージの送信完了")
-
-
-def receive_message(client_socket):
-    server_message = client_socket.recv(4096)
-    print(server_message.decode("utf-8"))
+def receive_messages(sock):
+    while True:
+        try:
+            data, _ = sock.recvfrom(4096)
+            print(f"\r{data.decode('utf-8')}\nYou: ", end="", flush=True)
+        except:
+            break
 
 
 def main():
-    # ソケットを作成
-    client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-    # ユーザーネームを入力
-    user_name = input("ユーザーネームを入力: ")
+    # 初期登録処理
+    username = input("ユーザー名を入力: ")
+    join_packet = bytes([0x01]) + username.encode("utf-8")
+    sock.sendto(join_packet, (SERVER_IP, SERVER_PORT))
+
+    # 受信スレッド開始
+    threading.Thread(target=receive_messages, args=(sock,), daemon=True).start()
 
     while True:
-        # メッセージを入力
-        message = input_message(user_name)
-
-        # メッセージを送信
-        send_message(client_socket, message)
-
-        # サーバからの応答を受信
-        receive_message(client_socket)
+        message = input("You: ")
+        packet = bytes([0x02]) + message.encode("utf-8")
+        sock.sendto(packet, (SERVER_IP, SERVER_PORT))
 
 
 if __name__ == "__main__":
