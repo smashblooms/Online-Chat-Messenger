@@ -1,34 +1,57 @@
 import socket
 import threading
-
-SERVER_IP = "127.0.0.1"
-SERVER_PORT = 8000
+import sys
 
 
-def receive_messages(sock):
+def receive_message(sock):
     while True:
-        try:
-            data, _ = sock.recvfrom(4096)
-            print(f"\r{data.decode('utf-8')}\nYou: ", end="", flush=True)
-        except:
+        data, client_address = sock.recvfrom(4096)
+
+        if data == b"DISCONNECT":
+            print("\nサーバーとの接続が切れました")
+            print("チャットを終了します")
+            sock.close()
             break
+
+        username_len = data[0]
+        username = data[1 : username_len + 1].decode("utf-8")
+        message = data[username_len + 1 :].decode("utf-8")
+
+        print(f"\r{username}: {message}\nYou> ", end="", flush=True)
+
+
+def send_join(sock, server_address, username):
+    username_len = len(username)
+    username_len_bytes = username_len.to_bytes(1, "big")
+
+    packet = username_len_bytes + (username).encode("utf-8")
+    sock.sendto(packet, server_address)
+
+
+def send_message(sock, server_address, username, message):
+    username_len = len(username)
+    username_len_bytes = username_len.to_bytes(1, "big")
+
+    packet = username_len_bytes + (username + message).encode("utf-8")
+    sock.sendto(packet, server_address)
 
 
 def main():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-    # 初期登録処理
-    username = input("ユーザー名を入力: ")
-    join_packet = bytes([0x01]) + username.encode("utf-8")
-    sock.sendto(join_packet, (SERVER_IP, SERVER_PORT))
+    server_address = ("127.0.0.1", 8000)
 
-    # 受信スレッド開始
-    threading.Thread(target=receive_messages, args=(sock,), daemon=True).start()
+    # ユーザー登録
+    username = input("ユーザーネームを入力してください: ")
+    send_join(sock, server_address, username)
+
+    thread = threading.Thread(target=receive_message, args=(sock,))
+    thread.start()
 
     while True:
-        message = input("You: ")
-        packet = bytes([0x02]) + message.encode("utf-8")
-        sock.sendto(packet, (SERVER_IP, SERVER_PORT))
+        message = input(f"You> ")
+
+        send_message(sock, server_address, username, message)
 
 
 if __name__ == "__main__":
